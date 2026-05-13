@@ -22,6 +22,11 @@ BATCH_SIZE  = 256
 
 
 def load_encoder(path, embed_dim=EMBED_DIM):
+
+    # Encoder weights are loaded in eval mode with map_location="cpu",
+    # ensuring probing works identically regardless of whether training used a GPU.
+    # eval() disables dropout and batch-norm update, so embeddings are deterministic.
+
     enc = Encoder(embed_dim)
     enc.load_state_dict(torch.load(path, map_location="cpu"))
     enc.eval()
@@ -38,7 +43,18 @@ def encode_dataset(encoder, obs):
         latents : (N*T, embed_dim)
     """
     N, T = obs.shape[:2]
+
+    # The full trajectory array is flattened to (N*T, 1, H, W)
+    # before encoding. Every individual frame is treated as an independent sample,
+    # discarding temporal structure — consistent with the linear probe's assumption
+    # that position is readable from a single embedding with no recurrence.
+    
     flat = obs.reshape(-1, *obs.shape[2:])   # (N*T, 1, H, W)
+
+    #Encoding is done in mini-batches under torch.no_grad() to
+    # avoid building a computation graph and to keep memory usage bounded when
+    # the full dataset is too large to encode in one forward pass.
+
     chunks = []
     with torch.no_grad():
         for i in range(0, len(flat), BATCH_SIZE):
@@ -60,13 +76,29 @@ def probe(encoder, obs, states, tag):
     latents = encode_dataset(encoder, obs)  # (N*T, d)
     labels  = states.reshape(-1, 2)         # (N*T, 2)
 
+    # A simple 80/20 sequential split (not shuffled) is used.
+    # Because frames come from ordered trajectories, this approximates a
+    # train-on-earlier / test-on-later split, avoiding any frame from the
+    # same trajectory leaking between train and test sets.
+    
     n_train = int(0.8 * len(latents))
     X_tr, X_te = latents[:n_train], latents[n_train:]
     y_tr, y_te = labels[:n_train],  labels[n_train:]
 
+    # Ridge regression (L2-regularised least squares) is the
+    # deliberate choice for a linear probe. Using a nonlinear model here would
+    # conflate representation quality with probe capacity; Ridge isolates how
+    # linearly decodable position is from the learned embeddings.
+    
     reg = Ridge(alpha=PROBE_ALPHA)
     reg.fit(X_tr, y_tr)
     y_pr = reg.predict(X_te)
+
+    # Two complementary metrics are reported per coordinate.
+    # MSE captures absolute prediction error in pixel units; Pearson r captures
+    # how well the embedding tracks relative position changes, which can be high
+    # even when absolute scale is off. Averaging r_x and r_y gives a single
+    # summary correlation for the table in Section 4.2.
 
     mse = float(np.mean((y_pr - y_te) ** 2))
     r_x = float(pearsonr(y_te[:, 0], y_pr[:, 0])[0])
@@ -84,11 +116,21 @@ def main():
     enc_sig   = load_encoder(f"{CKPT_DIR}/encoder_sigreg.pt")
     enc_nosig = load_encoder(f"{CKPT_DIR}/encoder_nosigreg.pt")
 
+    # Both encoders are probed on identical data in the same call,
+    # ensuring the comparison between SIGReg and baseline is controlled — any
+    # difference in MSE or r comes purely from the learned representations,
+    # not from probe training variance or data ordering.
+    
     print("Linear probing results:")
     y_te_s, y_pr_s, mse_s, r_s = probe(enc_sig,   obs, states, "With SIGReg")
     y_te_n, y_pr_n, mse_n, r_n = probe(enc_nosig, obs, states, "Without SIGReg")
 
     # Scatter plots: (SIGReg / No-SIGReg) × (x / y)
+    # A 2×2 scatter grid (model × coordinate) plots true vs.
+    # predicted position for every test frame. The red diagonal is the perfect-
+    # prediction line; tighter clustering around it means better linear
+    # decodability. This directly visualises the numbers in Table 2.
+    
     fig, axes = plt.subplots(2, 2, figsize=(10, 9))
     combos = [
         (y_te_s, y_pr_s, "With SIGReg"),
@@ -111,6 +153,10 @@ def main():
     plt.close()
     print(f"Saved scatter plot → {path}")
 
+    # Probe metrics are persisted to disk as a .npz file so that
+    # downstream scripts (e.g. step4 evaluation) can load them without re-running
+    # the probe, and so results are reproducible independently of console output.
+    
     np.savez(
         f"{DATA_DIR}/probe_metrics.npz",
         mse_sig=mse_s, r_sig=r_s,
