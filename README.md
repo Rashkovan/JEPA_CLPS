@@ -30,7 +30,7 @@ step5_ablations.py is the "playing with the node" step that re-trains the model 
 
 step6_pipeline.py runs all of the above in order and stitches all the output plots into a single summary figure.
 
-
+in Run1Figures folder, you can find the outputs of the model I ran. 
 
 ## Environment overview
 
