@@ -16,6 +16,7 @@ step3_probe.py is the linear probing of above steps to test whether the latents 
 
 
 step4_surprise.py asks "how wrong was the predictor's guess?" after running each trained model. In normal trajectories the prediction error should stay low. In teleportation trajectories, it should spike exactly at frame 25 because the dot jumped somewhere the model had no way to anticipate. This mirrors Figure 10 of the paper.                                    
-step5_ablations.py is the "playing with the node" step that re-trains the model many times, varying one thing at a time: (a) the strength of SIGReg (λ = 0, 0.01, 0.05, 0.1, 0.2, 0.5) and (b) the size of the latent vector (4, 8, 16, 32, 64 dimensions). For each we measured probing R² to see which settings actually matter.                                                                                                                                                   
-step6_pipeline.py runs all of the above in order and stitches all the output plots into a single summary figure.
 
+step5_ablations.py is the "playing with the node" step that re-trains the model many times, varying one thing at a time: (a) the strength of SIGReg (λ = 0, 0.01, 0.05, 0.1, 0.2, 0.5) and (b) the size of the latent vector (4, 8, 16, 32, 64 dimensions). For each we measured probing R² to see which settings actually matter.                                                                                                                                                   
+
+step6_pipeline.py runs all of the above in order and stitches all the output plots into a single summary figure.
