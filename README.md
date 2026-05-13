@@ -13,7 +13,6 @@ and violation-of-expectation surprise detection.
 
 ## The architecture of the files: 
 
-
 step1_data.py file is the data generation block/first step of the pipeline: 
 Creates a tiny simulated world: a white dot bouncing around inside a 32×32 pixel box. The dot moves with a bit of momentum, and bounces off the walls. We recorded 500 "episodes" (called trajectories) of 50 frames each — saving both the images and the true (x, y) position of the dot at every frame. Also made two sets of test episodes: 20 normal ones, and 20 where the dot secretly teleports to a random spot at frame 25. Those teleportation episodes are used later to test whether the model can detect something unexpected happening.                                                                            
 
@@ -32,6 +31,7 @@ step5_ablations.py is the "playing with the node" step that re-trains the model 
 step6_pipeline.py runs all of the above in order and stitches all the output plots into a single summary figure.
 
 
+
 ## Environment overview
 
 | Component | Detail |
@@ -43,9 +43,7 @@ step6_pipeline.py runs all of the above in order and stitches all the output plo
 | Training set | 500 trajectories × 50 steps |
 | Test sets | 20 normal + 20 teleportation (dot jumps at step 25) |
 
----
-
-## Architecture
+## Architecture of the Model
 
 ```
 Observation (1×32×32)
@@ -72,10 +70,6 @@ the N(0,1) characteristic function (Epps-Pulley statistic). Aggregate by
 averaging over projections. This forces the latent space toward a Gaussian
 geometry and prevents representation collapse.
 
----
-
----
-
 ## Run
 
 ### Full pipeline (recommended)
@@ -86,8 +80,6 @@ python step6_pipeline.py
 
 This runs all five steps in order, prints a summary table to stdout, and saves
 `figures/summary.png` containing all result plots.
-
----
 
 ## Outputs
 
@@ -109,8 +101,6 @@ hardware.
 | `figures/surprise.png` | VoE surprise over time (Fig. 10 replica) |
 | `figures/ablations.png` | λ and dim sweep (Figs. 15–16 replicas) |
 | `figures/summary.png` | Unified 2×2 summary of all results |
-
----
 
 ## Expected results
 
