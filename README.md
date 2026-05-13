@@ -13,6 +13,8 @@ and violation-of-expectation surprise detection.
 
 ## The architecture of the files: 
 
+requirements.txt is the file that includes all the packages and their versions required to run this project in Python. 
+
 step1_data.py file is the data generation block/first step of the pipeline: 
 Creates a tiny simulated world: a white dot bouncing around inside a 32×32 pixel box. The dot moves with a bit of momentum, and bounces off the walls. We recorded 500 "episodes" (called trajectories) of 50 frames each — saving both the images and the true (x, y) position of the dot at every frame. Also made two sets of test episodes: 20 normal ones, and 20 where the dot secretly teleports to a random spot at frame 25. Those teleportation episodes are used later to test whether the model can detect something unexpected happening.                                                                            
 
