@@ -20,6 +20,11 @@ def render_frame(x, y, size=IMG_SIZE, dot_r=DOT_RADIUS):
     """Render a grayscale frame with a filled dot of radius dot_r at (x, y)."""
     img = np.zeros((size, size), dtype=np.float32)
     xi, yi = int(round(x)), int(round(y))
+
+    # Rasterizes a filled circle using a bounding-box scan.
+    # Every pixel within dot_r distance of (xi, yi) is set to 1.0 (white).
+    # Pixels outside the image bounds are silently skipped.
+
     for dx in range(-dot_r, dot_r + 1):
         for dy in range(-dot_r, dot_r + 1):
             if dx * dx + dy * dy <= dot_r * dot_r:
@@ -31,15 +36,31 @@ def render_frame(x, y, size=IMG_SIZE, dot_r=DOT_RADIUS):
 
 def step_env(x, y, vx, vy, action, size=IMG_SIZE, dot_r=DOT_RADIUS):
     """Apply action with momentum, bounce off walls."""
+  
+    # Action clipping: raw actions are clamped to [-1, 1]
+    # before being blended into velocity, preventing runaway acceleration.
+
     dx, dy = np.clip(action[0], -1.0, 1.0), np.clip(action[1], -1.0, 1.0)
+
+    # Momentum / exponential smoothing.
+    # New velocity = 80% old + 20% action input, making motion feel inertial
+    # rather than instantaneous. Controlled by the 0.8 / 0.2 coefficients.
+    
     vx = 0.8 * vx + 0.2 * dx
     vy = 0.8 * vy + 0.2 * dy
+
+    # Wall margin keeps the dot's centre at least dot_r pixels
+    # from each edge, so the dot never renders partially outside the frame.
 
     margin = float(dot_r)
     lo, hi = margin, float(size) - 1.0 - margin
 
     x_new = x + vx
     y_new = y + vy
+
+    # Elastic (mirror) wall bouncing.
+    # When the dot would exceed a boundary, its position is clamped and the
+    # corresponding velocity component is reversed, simulating a perfect bounce.
 
     if x_new < lo:
         x_new = lo
@@ -71,6 +92,9 @@ def generate_trajectory(rng, teleport_step=None, T=T_LEN):
     margin = float(DOT_RADIUS)
     lo, hi = margin, float(IMG_SIZE) - 1.0 - margin
 
+    # Random initialisation within the valid margin area,
+    # ensuring the dot starts fully visible and with a non-zero random velocity.
+    
     x = rng.uniform(lo, hi)
     y = rng.uniform(lo, hi)
     vx = rng.uniform(-1.0, 1.0)
@@ -79,6 +103,13 @@ def generate_trajectory(rng, teleport_step=None, T=T_LEN):
     obs_list, act_list, state_list = [], [], []
 
     for t in range(T):
+
+        # Teleportation injection.
+        # At the designated step the dot is moved to a random new position
+        # without resetting velocity, creating an abrupt, unpredictable jump.
+        # This is used exclusively in the out-of-distribution test set to probe
+        # how well a world model handles sudden discontinuities.
+        
         if teleport_step is not None and t == teleport_step:
             x = rng.uniform(lo, hi)
             y = rng.uniform(lo, hi)
@@ -86,6 +117,9 @@ def generate_trajectory(rng, teleport_step=None, T=T_LEN):
         frame = render_frame(x, y)
         obs_list.append(frame[np.newaxis])   # (1, H, W)
         state_list.append([x, y])
+
+        # Action is sampled uniformly at random each step,
+        # producing an unbiased, policy-agnostic training distribution.
 
         action = rng.uniform(-1.0, 1.0, size=2).astype(np.float32)
         act_list.append(action)
@@ -114,8 +148,18 @@ def _collect(rng, n, teleport_step=None):
 
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
+
+    # Fixed global seed ensures the entire dataset (train + both
+    # test splits) is fully reproducible from a single RNG state.
+
     rng = np.random.default_rng(SEED)
 
+    # Three distinct dataset splits are written to disk as .npy files:
+    #   1. Training set      — 500 normal trajectories for model training.
+    #   2. Normal test set   — 20 held-out trajectories, same distribution as train.
+    #   3. Teleportation set — 20 trajectories with a forced jump at step 25,
+    #                          used to evaluate robustness to discontinuities.
+    
     print("Generating training trajectories...")
     obs_tr, act_tr, states_tr = _collect(rng, N_TRAJ)
     np.save(f"{DATA_DIR}/obs_train.npy", obs_tr)
