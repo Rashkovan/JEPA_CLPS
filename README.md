@@ -32,6 +32,11 @@ step6_pipeline.py runs all of the above in order and stitches all the output plo
 
 in Run1Figures folder, you can find the outputs of the model I ran. 
 
+## AI Usage
+This project made substantial use of Claude Code (Anthropic), an AI coding agent, to implement the full LeWM-mini codebase. The AI was used as a primary implementation partner: the agent wrote all Python source files from scratch, verified them with smoke tests. The debugging for issues that came up was done collaboratively. My tasks were primarily the lit review and absorption of how the approach works. I gave AI detailed specification of what to build and which paper sections to map each feature to 
+
+For me, using agentic coding wasn't new at all. I use it all the time in my labs and for person project. However, what was the most significant win for me is that AI coding allowed me to replicate something from scratch that even a year ago required an advance degree and long time spent on the project.  At the same time, this project allowed me to see why huge AI companies still hire teams of software engineers: It takes effort and time to understand what you are trying to create and to map part of your imagination with tools for its implementation. Finally, the big AI labs are still ahead of an individual coder not only because of research capabilities, and not even because of compute -- data is the biggest missing variable that large companies have effort, people, and tools to collect on an unimaginable scale. I really hope that world-building efforts will soon show cool products and wins as they are clearly building out the scope of their datasets. 
+
 ## Environment overview
 
 | Component | Detail |
