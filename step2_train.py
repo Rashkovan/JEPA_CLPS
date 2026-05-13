@@ -48,6 +48,12 @@ class Encoder(nn.Module):
 
     def __init__(self, embed_dim=EMBED_DIM):
         super().__init__()
+
+    # Three strided convolutions progressively halve spatial
+        # resolution (32→16→8→4), doubling channels each time (1→16→32→64).
+        # Strided convolutions are used instead of pooling to keep the
+        # operation learnable. 
+        
         self.cnn = nn.Sequential(
             nn.Conv2d(1, 16, 3, stride=2, padding=1),   # 32→16
             nn.ReLU(),
@@ -66,10 +72,14 @@ class Encoder(nn.Module):
 
 class Predictor(nn.Module):
     """2-layer MLP: (embedding, action) → next embedding."""
-
+    
     def __init__(self, embed_dim=EMBED_DIM, action_dim=2, hidden_dim=128):
         super().__init__()
         self.net = nn.Sequential(
+        # The predictor concatenates the current embedding and
+        # action before passing them through the MLP. This makes the transition
+        # model explicitly action-conditioned rather than treating action as a
+        # separate modulation signal.
             nn.Linear(embed_dim + action_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, embed_dim),
@@ -86,6 +96,11 @@ class Predictor(nn.Module):
 class TransitionDataset(Dataset):
     """Pairs of (obs_t, action_t, obs_{t+1}) from trajectory data."""
 
+    # Trajectories are sliced into overlapping (obs_t, obs_{t+1})
+        # pairs by indexing [:,:-1] and [:,1:] then flattening the first two
+        # dimensions. This converts N trajectories of length T into N*(T-1)
+        # independent transition samples, maximising data efficiency.
+    
     def __init__(self, obs, actions):
         # obs: (N, T, 1, H, W)  actions: (N, T, 2)
         rest = obs.shape[2:]
@@ -137,6 +152,11 @@ def compute_sigreg(embeddings, proj_vectors, t_grid):
     # Target CF: phi_N(t) = exp(-t^2/2), real-valued
     phi = torch.exp(-0.5 * t_grid ** 2)                 # (K,)
 
+    # The target CF phi_N(t) = exp(-t^2/2) is the CF of N(0,1).
+    # The loss is |ECF - phi_N|^2, summing squared deviations of both real
+    # and imaginary parts. Minimising this drives the latent distribution
+    # toward Gaussianity without requiring an explicit density estimate. 
+    
     # |ECF - phi_N|^2 averaged over projections and quadrature points
     diff_sq = (ecf_real - phi.unsqueeze(0)) ** 2 + ecf_imag ** 2  # (M, K)
     return diff_sq.mean()
@@ -147,6 +167,11 @@ def compute_sigreg(embeddings, proj_vectors, t_grid):
 # ---------------------------------------------------------------------------
 
 def _make_proj_vectors(embed_dim, seed=SEED):
+    
+    # Projection vectors are fixed at initialisation (not learned)
+    # and normalised to unit length. Using a separate seeded generator keeps
+    # them reproducible and independent of the main training RNG state.
+
     gen = torch.Generator()
     gen.manual_seed(seed)
     raw = torch.randn(M_PROJ, embed_dim, generator=gen)
@@ -192,7 +217,19 @@ def train_model(lam, embed_dim=EMBED_DIM, n_epochs=N_EPOCHS,
             z_t1 = encoder(obs_t1)
             z_pr = predictor(z_t, act_t)
 
+            # The primary loss is MSE between the predicted next
+            # embedding z_pr and the encoded true next observation z_t1.
+            # This is a latent-space prediction loss — the model never decodes
+            # back to pixels, avoiding the cost and blur of reconstruction.
+
             loss = nn.functional.mse_loss(z_pr, z_t1)
+           
+            #SIGReg is added only when lam > 0, making it
+            # trivial to run an ablation (lam=0) with identical code.
+            # Both z_t and z_t1 from the current batch are pooled together
+            # before computing the statistic, doubling the effective sample
+            # size for the Gaussianity test at no extra forward-pass cost.
+        
             if lam > 0:
                 all_emb = torch.cat([z_t, z_t1], dim=0)
                 loss = loss + lam * compute_sigreg(all_emb, proj_vectors, t_grid)
@@ -215,6 +252,10 @@ def main():
     os.makedirs(CKPT_DIR, exist_ok=True)
     os.makedirs(FIG_DIR, exist_ok=True)
 
+    # Two full training runs are executed back-to-back — one with
+    # SIGReg (lam=0.1) and one without (lam=0) — and both checkpoints are saved.
+    # This produces the paired models needed for the ablation study in Section 4.
+
     print("Training WITH SIGReg (λ=0.1) …")
     enc_s, pred_s, losses_s = train_model(LAMBDA_SIGREG)
     torch.save(enc_s.state_dict(),  f"{CKPT_DIR}/encoder_sigreg.pt")
@@ -225,7 +266,10 @@ def main():
     torch.save(enc_n.state_dict(),  f"{CKPT_DIR}/encoder_nosigreg.pt")
     torch.save(pred_n.state_dict(), f"{CKPT_DIR}/predictor_nosigreg.pt")
 
-    # Save loss curves
+    # Save loss curves: 
+    # gives an immediate visual check that SIGReg does not
+    # destabilise training and lets the reader eyeball convergence speed.
+    
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(losses_s, label="With SIGReg (λ=0.1)")
     ax.plot(losses_n, label="Without SIGReg (λ=0)")
