@@ -32,6 +32,8 @@ step6_pipeline.py runs all of the above in order and stitches all the output plo
 
 in Run1Figures folder, you can find the outputs of the model I ran. 
 
+Rashkovan_CLPS950_Final_Project.pdf is the paper write-up to go along with the submission. 
+
 ## AI Usage
 This project made substantial use of Claude Code (Anthropic), an AI coding agent, to implement the full LeWM-mini codebase. The AI was used as a primary implementation partner: the agent wrote all Python source files from scratch, verified them with smoke tests. The debugging for issues that came up was done collaboratively. My tasks were primarily the lit review and absorption of how the approach works. I gave AI detailed specification of what to build and which paper sections to map each feature to 
 
